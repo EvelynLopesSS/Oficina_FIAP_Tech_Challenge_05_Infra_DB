@@ -1,0 +1,33 @@
+name: 🪣 Bootstrap Terraform Remote State (S3)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap-backend:
+    name: 🚀 Provision S3 Bucket
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔐 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: 🪣 Check if S3 Bucket Exists
+        id: check_bucket
+        run: |
+          if aws s3api head-bucket --bucket ${{ secrets.AWS_TF_STATE_BUCKET }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📂 Create S3 Bucket
+        if: steps.check_bucket.outputs.exists == 'false'
+        run: aws s3 mb s3://${{ secrets.AWS_TF_STATE_BUCKET }} --region ${{ secrets.AWS_REGION }}
+
+      - name: 🔄 Enable Bucket Versioning
+        run: aws s3api put-bucket-versioning --bucket ${{ secrets.AWS_TF_STATE_BUCKET }} --versioning-configuration Status=Enabled
