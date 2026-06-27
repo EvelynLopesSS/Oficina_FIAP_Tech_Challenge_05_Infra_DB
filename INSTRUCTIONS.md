@@ -8,7 +8,9 @@ Para resolver o problema de travamento durante picos de acesso (apresentado no p
 
 Abaixo temos a interface final do sistema, desenvolvida com Streamlit e estilizada com CSS customizado (Cyberpunk/Neon theme), fornecendo uma experiência imersiva e reativa ao usuário.
 
-<img width="1350" height="549" alt="image" src="https://github.com/user-attachments/assets/9cee1262-1d06-4498-a737-df1b887a430a" />
+
+
+https://github.com/user-attachments/assets/96c7689f-cf8a-417f-b49a-8779c995ca1b
 
 
 
