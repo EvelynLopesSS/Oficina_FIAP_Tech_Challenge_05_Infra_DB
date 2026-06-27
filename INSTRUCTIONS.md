@@ -20,41 +20,50 @@ A arquitetura foi dividida em microsserviços para garantir escalabilidade isola
 ```mermaid
 graph TD
     User((Usuário))
-    
-    subgraph aws_cloud [AWS Cloud - us-east-1]
-        
-        subgraph eks_cluster [Kubernetes Cluster EKS]
-            UI[Frontend Streamlit<br>LoadBalancer]
-            API[API Flask<br>LoadBalancer]
-            WRK[Worker OpenCV<br>Background]
+
+    subgraph aws_cloud [AWS Cloud - EKS + Services]
+
+        subgraph eks_cluster [Kubernetes - EKS]
+            UI[Frontend Streamlit]
+            API[API Flask]
+            WRK[Worker OpenCV]
         end
-        
-        subgraph storage_and_messaging [Armazenamento e Mensageria]
-            S3[(Amazon S3<br>Vídeos e ZIPs)]
-            SQS[Amazon SQS<br>Fila de Processamento]
-            RDS[(Amazon RDS<br>PostgreSQL)]
+
+        subgraph storage [Storage & Queue]
+            S3[(Amazon S3)]
+            SQS[[Amazon SQS]]
+            RDS[(PostgreSQL)]
         end
-        
+
+        subgraph notifications [Notificações]
+            EMAIL_SUCCESS[Email Sucesso]
+            EMAIL_ERROR[Email Erro]
+        end
+
     end
-    
-    Email((E-mail de Erro))
-    
-    %% Fluxo do Usuário
-    User -->|1. Acessa Tela| UI
-    UI -->|2. Upload de Vídeo| API
-    
-    %% Fluxo da API (Ingestão)
-    API -->|3. Salva Arquivo| S3
-    API -->|4. Registra NA_FILA| RDS
-    API -->|5. Publica Evento| SQS
-    
-    %% Fluxo do Worker (Processamento)
-    SQS -->|6. Consome Evento| WRK
-    WRK -->|7. Download .mp4| S3
-    WRK -->|8. Extrai Imagens| WRK
-    WRK -->|9. Upload .zip| S3
-    WRK -->|10. Status CONCLUIDO| RDS
-    WRK -.->|Em caso de Erro| Email
+
+    %% Fluxo principal
+    User --> UI
+    UI --> API
+
+    API -->|Upload vídeo| S3
+    API -->|Status NA_FILA| RDS
+    API -->|Publica mensagem| SQS
+
+    SQS -->|Consome job| WRK
+
+    WRK -->|Download vídeo| S3
+    WRK -->|Processa frames| WRK
+    WRK -->|Upload ZIP| S3
+    WRK -->|Status CONCLUIDO| RDS
+    WRK -->|Gerar presigned URL| S3
+
+    %% Emails
+    WRK -->|Sucesso + link download| EMAIL_SUCCESS
+    WRK -->|Falha no processamento| EMAIL_ERROR
+
+    EMAIL_SUCCESS -->|SMTP/SES| User
+    EMAIL_ERROR -->|SMTP/SES| User
 ```
 
 ---
@@ -96,8 +105,56 @@ Para subir todo o ecossistema na AWS Academy do zero, as pipelines (GitHub Actio
    * Rode a pipeline **`🚀 CI/CD - Hackathon Frontend`**.
 
 ---
+## 📊 3. Monitoramento e Observabilidade (AWS CloudWatch)
 
-## 💻 3. Como Acessar e Testar o Sistema (Ponta a Ponta)
+O sistema utiliza **Amazon CloudWatch + Container Insights** como solução de observabilidade nativa na AWS, substituindo ferramentas como Prometheus e Grafana.
+
+Essa abordagem fornece visibilidade completa da infraestrutura executada no EKS, incluindo API, Worker e serviços auxiliares.
+
+
+### 🪵 Logs Centralizados
+
+Os logs das aplicações podem ser acessados diretamente no AWS Console:
+
+```bash
+CloudWatch → Logs → Log groups
+```
+
+Dentro dos log groups é possível visualizar:
+
+* Logs da API Flask
+* Logs do Worker de processamento
+* Erros de execução (ex: OpenCV, S3, SQS)
+* Eventos de CrashLoopBackOff no Kubernetes
+
+
+### 📡 Métricas do Cluster (EKS)
+
+As métricas do cluster são disponibilizadas via:
+
+```bash
+CloudWatch → Container Insights → Performance Monitoring
+```
+
+Incluindo:
+
+* Uso de CPU e memória por pod e node
+* Restart count de containers
+* Status de deployments e pods
+* Saúde geral do cluster EKS
+* Métricas de performance de serviços
+
+
+### 🚨 Benefícios da Solução
+
+* Observabilidade totalmente gerenciada pela AWS
+* Sem necessidade de infraestrutura adicional (Prometheus/Grafana)
+* Integração nativa com EKS, S3 e SQS
+* Escalabilidade automática de monitoramento
+* Debug simplificado em ambiente distribuído
+
+  
+## 💻 4. Como Acessar e Testar o Sistema (Ponta a Ponta)
 
 Após o sucesso em todas as pipelines, obtenha o link público de acesso à interface do usuário. No terminal da AWS, execute:
 ```bash
@@ -112,3 +169,9 @@ Copie o endereço da coluna **`EXTERNAL-IP`**, cole no seu navegador (com `http:
 3. **Processamento (Worker):** No painel inferior, seu vídeo aparecerá com a flag 🟡 `STATUS: NA_FILA`. Aguarde alguns minutos enquanto a inteligência artificial no cluster EKS recorta as imagens e gera o arquivo ZIP.
 4. **Sincronização e Download:** Clique no botão **SYNC ⟳**. O status mudará para 🟢 `STATUS: CONCLUIDO` e um link **Download Pacote Compresso (.ZIP)** será liberado. Esse link utiliza *AWS Presigned URLs* para garantir acesso temporário e seguro diretamente do S3.
 5. **Tratamento de Erros:** Caso o arquivo não seja processável, o Worker atualizará o status para 🔴 `ERRO` e disparará um e-mail de alerta automático para o contato cadastrado.
+
+
+
+
+
+
